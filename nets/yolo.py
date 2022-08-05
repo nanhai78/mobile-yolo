@@ -1,3 +1,4 @@
+import sys
 from collections import OrderedDict
 
 import torch
@@ -11,6 +12,8 @@ from .mobilenet_v2 import mobilenet_v2
 from .mobilenet_v3 import mobilenet_v3
 from .resnet import resnet50
 from .vgg import vgg
+from .shufflenet_v2 import shufflnet_v2
+from .shufflenet_v2_plus import shufflenet_v2_plus
 
 
 # 表示主干网络
@@ -135,6 +138,33 @@ class ResNet(nn.Module):
         feat4 = self.model.layer3(feat3)
         feat5 = self.model.layer4(feat4)
         return [feat3, feat4, feat5]
+
+
+class ShuffleNetV2(nn.Module):
+    def __init__(self, pretrained=False, **kwargs):
+        super(ShuffleNetV2, self).__init__()
+        self.model = shufflnet_v2(pretrained=pretrained, **kwargs)
+
+    def forward(self, x):
+        x = self.model.first_conv(x)
+        x = self.model.maxpool(x)
+        out3 = self.model.features[0:4](x)
+        out4 = self.model.features[4:12](out3)
+        out5 = self.model.features[12:16](out4)
+        return out3, out4, out5
+
+
+class ShuffleNetV2Plus(nn.Module):
+    def __init__(self, pretrained=False, **kwargs):
+        super(ShuffleNetV2Plus, self).__init__()
+        self.model = shufflenet_v2_plus(pretrained=pretrained, **kwargs)
+
+    def forward(self, x):
+        x = self.model.first_conv(x)
+        out3 = self.model.features[0:8](x)
+        out4 = self.model.features[8:16](out3)
+        out5 = self.model.features[16:20](out4)
+        return out3, out4, out5
 
 
 def conv2d(filter_in, filter_out, kernel_size, groups=1, stride=1):
@@ -287,14 +317,37 @@ class YoloBody(nn.Module):
             # ---------------------------------------------------#
             self.backbone = ResNet(pretrained=pretrained)
             in_filters = [512, 1024, 2048]
+        elif backbone == 'shufflenetv2':
+            model_size = '2.0x'
+            self.backbone = ShuffleNetV2(pretrained=pretrained, model_size=model_size)
+            if model_size == '1.0x':
+                in_filters = [116, 232, 464]
+            elif model_size == '1.5x':
+                in_filters = [176, 352, 704]
+            elif model_size == '2.0x':
+                in_filters = [244, 488, 976]
+            else:
+                print("输入的宽度参数有误")
+        elif backbone == 'shufflenetv2plus':
+            model_size = 'Large'
+            self.backbone = ShuffleNetV2Plus(pretrained=pretrained, model_size=model_size)
+            if model_size == 'Small':
+                in_filters = [104, 208, 416]
+            elif model_size == "Medium":
+                in_filters = [128, 256, 512]
+            elif model_size == "Large":
+                in_filters = [168, 336, 672]
+            else:
+                print("输入的宽度参数有误")
+
         else:
             raise ValueError(
-                'Unsupported backbone - `{}`, Use mobilenetv1, mobilenetv2, mobilenetv3, ghostnet, vgg, densenet121, densenet169, densenet201, resnet50.'.format(
+                'Unsupported backbone - `{}`, Use mobilenetv1, mobilenetv2, mobilenetv3, ghostnet, vgg, densenet121, densenet169, densenet201, resnet50, shufflenetv2.'.format(
                     backbone))
         # in_filters为主干网络三个输出的channel以mobilev1为例 in_filters = [256, 512, 1024]
         self.conv1 = make_three_conv([512, 1024], in_filters[2])  # 1024 -> 512
         self.SPP = SpatialPyramidPooling()
-        self.conv2 = make_three_conv([512, 1024], 2048) # 2018 -> 512
+        self.conv2 = make_three_conv([512, 1024], 2048)  # 2018 -> 512
 
         self.upsample1 = Upsample(512, 256)  # 512 -> 216
         self.conv_for_P4 = conv2d(in_filters[1], 256, 1)
