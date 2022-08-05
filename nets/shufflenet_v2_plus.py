@@ -336,13 +336,13 @@ def shufflenet_v2_plus(pretrained=False, **kwargs):
     if pretrained:
         if model.model_size == 'Large':
             state_dic = torch.load(
-                'D:\\python_all\\WorkSpace001\\mobilenet-yolov4-pytorch-3.1\\weights\\ShuffleNetV2+.Large.pth')
+                './weights/ShuffleNetV2+.Large.pth')
         elif model.model_size == 'Medium':
             state_dic = torch.load(
-                'D:\\python_all\\WorkSpace001\\mobilenet-yolov4-pytorch-3.1\\weights\\ShuffleNetV2+.Medium.pth')
+                './weights/ShuffleNetV2+.Medium.pth')
         else:
             state_dic = torch.load(
-                'D:\\python_all\\WorkSpace001\\mobilenet-yolov4-pytorch-3.1\\weights\\ShuffleNetV2+.Small.pth')
+                './weights/ShuffleNetV2+.Small.pth')
         new_dict = OrderedDict()
         for key, v in state_dic['state_dict'].items():
             name = key[7:]

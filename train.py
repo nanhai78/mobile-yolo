@@ -79,7 +79,7 @@ if __name__ == "__main__":
     #   fp16        是否使用混合精度训练
     #               可减少约一半的显存、需要pytorch1.7.1以上
     # ---------------------------------------------------------------------#
-    fp16 = False
+    fp16 = True
     # ---------------------------------------------------------------------#
     #   classes_path    指向model_data下的txt，与自己训练的数据集相关 
     #                   训练前一定要修改classes_path，使其对应自己的数据集
@@ -89,7 +89,7 @@ if __name__ == "__main__":
     #   anchors_path    代表先验框对应的txt文件，一般不修改。
     #   anchors_mask    用于帮助代码找到对应的先验框，一般不修改。
     # ---------------------------------------------------------------------#
-    anchors_path = 'model_data/yolo_anchors.txt'
+    anchors_path = 'model_data/my_anchors.txt'
     anchors_mask = [[6, 7, 8], [3, 4, 5], [0, 1, 2]]
     # ----------------------------------------------------------------------------------------------------------------------------#
     #   权值文件的下载请看README，可以通过网盘下载。模型的 预训练权重 对不同数据集是通用的，因为特征是通用的。
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     #      可以设置mosaic=True，直接随机初始化参数开始训练，但得到的效果仍然不如有预训练的情况。（像COCO这样的大数据集可以这样做）
     #   2、了解imagenet数据集，首先训练分类模型，获得网络的主干部分权值，分类模型的 主干部分 和该模型通用，基于此进行训练。
     # ----------------------------------------------------------------------------------------------------------------------------#
-    model_path = 'weights/last_epoch_weights.pth'
+    model_path = ''
     # ------------------------------------------------------#
     #   input_shape     输入的shape大小，一定要是32的倍数0.
 
@@ -138,7 +138,8 @@ if __name__ == "__main__":
     #                   如果不设置model_path，pretrained = True，此时仅加载主干开始训练。
     #                   如果不设置model_path，pretrained = False，Freeze_Train = Fasle，此时从0开始训练，且没有冻结主干的过程。
     # ----------------------------------------------------------------------------------------------------------------------------#
-    pretrained = False  # 如果设置了model_path，模型的初始化权重就是model_path指定的权重，如果没有设置model_path且pretrained = True 此时模型仅仅backbone部分加载了预训练权重
+    pretrained = True  # 如果设置了model_path，模型的初始化权重就是model_path指定的权重，如果没有设置model_path且pretrained = True 此时模型仅仅backbone部分加载了预训练权重
+    is_download = False
     # ------------------------------------------------------------------#
     #   mosaic              马赛克数据增强。
     #   mosaic_prob         每个step有多少概率使用mosaic数据增强，默认50%。
@@ -156,7 +157,7 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------#
     mosaic = True
     mosaic_prob = 0.5
-    mixup = True
+    mixup = False
     mixup_prob = 0.5
     special_aug_ratio = 0.7
     # ------------------------------------------------------------------#
@@ -209,8 +210,8 @@ if __name__ == "__main__":
     #                       (当Freeze_Train=False时失效)
     # ------------------------------------------------------------------#
     Init_Epoch = 0
-    Freeze_Epoch = 50  # 冻结阶段只训练head部分
-    Freeze_batch_size = 32
+    Freeze_Epoch = 20  # 冻结阶段只训练head部分
+    Freeze_batch_size = 4
     # ------------------------------------------------------------------#
     #   解冻阶段训练参数89
     #   此时模型的主干不被冻结了，特征提取网络会发生改变
@@ -221,7 +222,7 @@ if __name__ == "__main__":
     #   Unfreeze_batch_size     模型在解冻后的batch_size
     # ------------------------------------------------------------------#
     UnFreeze_Epoch = 50
-    Unfreeze_batch_size = 16
+    Unfreeze_batch_size = 2
     # ------------------------------------------------------------------#
     #   Freeze_Train    是否进行冻结训练
     #                   默认先冻结主干训练后解冻训练。
@@ -296,7 +297,7 @@ if __name__ == "__main__":
     # ------------------------------------------------------#
     #   设置用到的显卡
     # ------------------------------------------------------#
-    ngpus_per_node = torch.cuda.device_count()
+    ngpus_per_node = torch.cuda.device_count()  # 返回可用的GPU数量
     if distributed:
         dist.init_process_group(backend="nccl")
         local_rank = int(os.environ["LOCAL_RANK"])
@@ -306,7 +307,7 @@ if __name__ == "__main__":
             print(f"[{os.getpid()}] (rank = {rank}, local_rank = {local_rank}) training...")
             print("Gpu Device Count : ", ngpus_per_node)
     else:
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')  # cuda
         local_rank = 0
 
     # ----------------------------------------------------#
@@ -318,7 +319,8 @@ if __name__ == "__main__":
                 download_weights(backbone)
             dist.barrier()
         else:
-            download_weights(backbone)
+            if is_download:
+                download_weights(backbone)
 
     # ----------------------------------------------------#
     #   获取classes和anchor
