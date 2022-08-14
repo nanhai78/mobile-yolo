@@ -1,22 +1,9 @@
 # -------------------------------------#
 #       对数据集进行训练
 # -------------------------------------#
-import os
 
-import numpy as np
-import torch
-import torch.backends.cudnn as cudnn
-import torch.distributed as dist
-import torch.nn as nn
-import torch.optim as optim
 from torch.utils.data import DataLoader
-from nets.yolo import YoloBody
-from nets.yolo_training import (YOLOLoss, get_lr_scheduler, set_optimizer_lr,
-                                weights_init)
-from utils.callbacks import LossHistory
-from utils.dataloader import YoloDataset, yolo_dataset_collate
 from utils.utils import download_weights, get_anchors, get_classes, show_config
-from utils.utils_fit import fit_one_epoch
 import datetime
 import os
 
@@ -31,7 +18,7 @@ from torch.utils.data import DataLoader
 
 from nets.yolo import YoloBody
 from nets.yolo_training import (YOLOLoss, get_lr_scheduler, set_optimizer_lr,
-                                weights_init)
+                                weights_init, ModelEMA)
 from utils.callbacks import LossHistory, EvalCallback
 from utils.dataloader import YoloDataset, yolo_dataset_collate
 from utils.utils import get_anchors, get_classes, show_config
@@ -410,7 +397,10 @@ if __name__ == "__main__":
             model_train = torch.nn.DataParallel(model)
             cudnn.benchmark = True
             model_train = model_train.cuda()
-
+    # ----------------------------#
+    #   权值平滑
+    # ----------------------------#
+    ema = ModelEMA(model_train)
     # ---------------------------#
     #   读取数据集对应的txt
     # ---------------------------#
@@ -512,6 +502,8 @@ if __name__ == "__main__":
 
         if epoch_step == 0 or epoch_step_val == 0:
             raise ValueError("数据集过小，无法继续进行训练，请扩充数据集。")
+        if ema:
+            ema.updates = Init_Epoch * epoch_step
 
         # ---------------------------------------#
         #   构建数据集加载器。
@@ -587,6 +579,10 @@ if __name__ == "__main__":
                 if distributed:
                     batch_size = batch_size // ngpus_per_node
 
+                if ema:
+                    freeze_step = num_train // Freeze_batch_size
+                    ema.updates = Freeze_Epoch * freeze_step + (epoch - Freeze_Epoch) * epoch_step
+
                 gen = DataLoader(train_dataset, shuffle=shuffle, batch_size=batch_size, num_workers=num_workers,
                                  pin_memory=True,
                                  drop_last=True, collate_fn=yolo_dataset_collate, sampler=train_sampler)
@@ -604,7 +600,7 @@ if __name__ == "__main__":
 
             set_optimizer_lr(optimizer, lr_scheduler_func, epoch)
 
-            fit_one_epoch(model_train, model, yolo_loss, loss_history, eval_callback, optimizer, epoch, epoch_step,
+            fit_one_epoch(model_train, model, ema, yolo_loss, loss_history, eval_callback, optimizer, epoch, epoch_step,
                           epoch_step_val, gen, gen_val, UnFreeze_Epoch, Cuda, fp16, scaler, save_period, save_dir,
                           local_rank)
 
